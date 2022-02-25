@@ -70,11 +70,11 @@ async def main():
             log.debug("=>{}:{}".format(container.name, status))
 
             if status is None:
-                to_check.remove(container.name)
+                to_check.pop(0)
 
             if status == "healthy":
                 log.debug("Container {} is healthy".format(container.name))
-                to_check.remove(container.name)
+                to_check.pop(0)
 
         if to_check:
             retries -= 1
