@@ -1,7 +1,7 @@
+import asyncio
 import argparse
 import logging
 import sys
-import time
 
 import docker
 
@@ -35,7 +35,7 @@ def get_log_level(log_level: str):
     return getattr(logging, log_level)
 
 
-def main():
+async def main():
     """
     Monitor the container health checks until they are all running
     or the retries are maxed out.
@@ -66,10 +66,10 @@ def main():
 
         log.debug("Checking containers: {}".format(to_check))
         for container in running_containers:
-            status = container.attrs["State"].get("Health", {}).get("Status")
+            status = container.attrs["State"].get("Health", {}).get("Status", "N/A")
+            log.debug("=>{}:{}".format(container.name, status))
 
             if status is None:
-                log.debug("No available health check(s): {}".format(container.name))
                 to_check.remove(container.name)
 
             if status == "healthy":
@@ -77,8 +77,8 @@ def main():
                 to_check.remove(container.name)
 
         if to_check:
-            time.sleep(delay)
             retries -= 1
+            await asyncio.sleep(delay)
 
     if to_check:
         log.error("Health check timed for: {}".format(to_check))
@@ -86,4 +86,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.get_event_loop().run_until_complete(main())
