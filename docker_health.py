@@ -9,8 +9,11 @@ import docker
 client = docker.from_env()
 
 
-log = logging.getLogger("docker-monitor")
-log.addHandler(logging.StreamHandler())
+LOG = logging.getLogger("docker-health-monitor")
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+ch = logging.StreamHandler()
+ch.setFormatter(formatter)
+LOG.addHandler(ch)
 
 
 def cli_parser():
@@ -35,6 +38,31 @@ def get_log_level(log_level: str):
     return getattr(logging, log_level)
 
 
+def get_status(container):
+    return container.attrs["State"].get("Health", {}).get("Status", "N/A")
+
+
+def get_docker_health(name: str = None, prefix: str = None):
+    """
+    Get the status of all containers with the given prefix.
+    """
+    if not any((name, prefix)):
+        raise ValueError("Either name or prefix must be provided")
+
+    if prefix:
+        containers = [c for c in client.containers.list() if c.name.startswith(prefix)]
+    else:
+        containers = client.containers.list(filters={"name": name})
+
+    statuses = []
+    for container in containers:
+        status = get_status(container)
+        if status != "N/A":
+            LOG.info("=> {}: {}".format(container.name, status))
+            statuses.append((container.name, status))
+    return statuses
+
+
 async def main():
     """
     Monitor the container health checks until they are all running
@@ -49,39 +77,17 @@ async def main():
     retries = int(args.retries)
 
     log_level = get_log_level(args.log)
-    log.setLevel(log_level)
+    LOG.setLevel(log_level)
 
-    running_containers = client.containers.list()
-    if prefix:
-        to_check = [c.name for c in running_containers if c.name.startswith(prefix)]
-    else:
-        to_check = [c.name for c in running_containers]
+    health = dict(get_docker_health(prefix=prefix))
+    while any(status != "healthy" for status in health.values()) and retries > 0:
+        LOG.info("Monitoring: {}".format(list(health.keys())))
+        await asyncio.sleep(delay)
+        retries -= 1
+        health.update(dict(get_docker_health(prefix=prefix)))
 
-    if not to_check:
-        log.debug("No containers to check")
-        sys.exit(0)
-
-    while to_check and retries > 0:
-        running_containers = client.containers.list()
-
-        log.debug("Checking containers: {}".format(to_check))
-        for container in running_containers:
-            status = container.attrs["State"].get("Health", {}).get("Status", "N/A")
-            log.debug("=>{}:{}".format(container.name, status))
-
-            if status is None:
-                to_check.pop(0)
-
-            if status == "healthy":
-                log.debug("Container {} is healthy".format(container.name))
-                to_check.pop(0)
-
-        if to_check:
-            retries -= 1
-            await asyncio.sleep(delay)
-
-    if to_check:
-        log.error("Health check timed for: {}".format(to_check))
+    if unhealthy := {k: v for k, v in health.items() if v != "healthy"}:
+        LOG.error("Health check timed for: {}".format(unhealthy.keys()))
         sys.exit(1)
 
 
