@@ -1,12 +1,12 @@
 import argparse
-from collections import defaultdict
 import sys
-
+from collections import defaultdict
+from pathlib import Path
 
 try:
+    from ansible import context
     from ansible.cli import CLI
     from ansible.cli.inventory import InventoryCLI
-    from ansible import context
 except ImportError:
     sys.exit("Ansible is not installed. Please install by running: pip install ansible")
 
@@ -88,7 +88,10 @@ def main():
     testbed_vars = generate_testbed_vars(host_vars)
     testbed_vars.update({"name": args.topo})
     testbed = render_testbed(template="pyats_template.j2", data=testbed_vars)
-    print(testbed)
+
+    if Path(args.topo).exists() and Path(args.topo).is_dir():
+        fp = Path(args.topo) / "testbed.yaml"
+        fp.write_text(testbed)
 
 
 if __name__ == "__main__":
