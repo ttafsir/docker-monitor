@@ -6,7 +6,7 @@ from jinja2 import Environment, FileSystemLoader, Template
 
 class TemplateBuilder:
     def __init__(self, template_dir: str = "templates"):
-        self._template_path = Path(template_dir)
+        self._template_path = template_dir
         self._set_env()
 
     def _set_env(self) -> Environment:
@@ -17,7 +17,7 @@ class TemplateBuilder:
         env = Environment(
             loader=FileSystemLoader(self._template_path),
             trim_blocks=True,
-            lstrip_blocks=True,
+            lstrip_blocks=False,
             keep_trailing_newline=True,
             extensions=["jinja2.ext.do"],
         )
@@ -39,4 +39,8 @@ class TemplateBuilder:
         :rtype: str
         """
         template = self.env.get_or_select_template(template_name_or_list)
+        return self._render(template, context)
+
+    def render_string(self, template_string: str, context: Any) -> str:
+        template = Template(template_string)
         return self._render(template, context)
